@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>権限デモアプリ</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+        }
+        #videoElement {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        #locationInfo, #voiceInfo {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+        }
+        #stopVoiceBtn {
+            background-color: #f44336;
+        }
+        #locationInfo ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #locationInfo li {
+            margin-bottom: 10px;
+        }
+        #cameraControls {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+<h1>権限デモアプリ</h1>
+
+<h2>カメラ権限デモ</h2>
+<button id="cameraBtn">カメラを開始</button>
+<div id="cameraControls" style="display: none;">
+    <button id="switchCameraBtn">カメラを切り替え</button>
+    <button id="stopCameraBtn">カメラを停止</button>
+</div>
+<video id="videoElement" autoplay playsinline></video>
+
+<h2>位置情報権限デモ</h2>
+<button id="locationBtn">位置情報を取得</button>
+<div id="locationInfo"></div>
+
+<h2>音声権限デモ</h2>
+<button id="voiceBtn">音声録音を開始</button>
+<button id="stopVoiceBtn" disabled>録音を停止</button>
+<button id="playBtn" disabled>録音を再生</button>
+<div id="voiceInfo"></div>
+
+<script>
+    // カメラ機能
+    const cameraBtn = document.getElementById('cameraBtn');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+    const videoElement = document.getElementById('videoElement');
+    const cameraControls = document.getElementById('cameraControls');
+    let currentStream;
+    let facingMode = 'environment'; // 'environment' for rear camera, 'user' for front camera
+
+    async function startCamera() {
+        try {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            const constraints = {
+                video: { facingMode: facingMode }
+            };
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            videoElement.srcObject = currentStream;
+            cameraControls.style.display = 'block';
+            cameraBtn.textContent = 'カメラを再開';
+        } catch (err) {
+            console.error("カメラの起動に失敗しました:", err);
+            alert("カメラの権限が拒否されました。");
+        }
+    }
+
+    cameraBtn.addEventListener('click', startCamera);
+
+    switchCameraBtn.addEventListener('click', () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        startCamera();
+    });
+
+    stopCameraBtn.addEventListener('click', () => {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            videoElement.srcObject = null;
+            cameraControls.style.display = 'none';
+            cameraBtn.textContent = 'カメラを開始';
+        }
+    });
+
+    // 位置情報機能
+    const locationBtn = document.getElementById('locationBtn');
+    const locationInfo = document.getElementById('locationInfo');
+
+    locationBtn.addEventListener('click', () => {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const locationItems = [
+                    { key: 'latitude', label: '緯度', value: position.coords.latitude },
+                    { key: 'longitude', label: '経度', value: position.coords.longitude },
+                    { key: 'altitude', label: '高度', value: position.coords.altitude },
+                    { key: 'accuracy', label: '精度', value: position.coords.accuracy },
+                    { key: 'altitudeAccuracy', label: '高度精度', value: position.coords.altitudeAccuracy },
+                    { key: 'heading', label: '方角', value: position.coords.heading },
+                    { key: 'speed', label: '速度', value: position.coords.speed },
+                    { key: 'timestamp', label: 'タイムスタンプ', value: new Date(position.timestamp).toLocaleString() }
+                ];
+
+                const listItems = locationItems.map(item => {
+                    let displayValue = item.value;
+                    if (item.value === null) {
+                        displayValue = '利用不可';
+                    } else if (typeof item.value === 'number') {
+                        displayValue = item.value.toFixed(6);
+                    }
+                    return `<li><strong>${item.label}（${item.key}）:</strong> ${displayValue}</li>`;
+                }).join('');
+
+                locationInfo.innerHTML = `<ul>${listItems}</ul>`;
+            }, (err) => {
+                console.error("位置情報の取得に失敗しました:", err);
+                alert("位置情報の権限が拒否されました。");
+            }, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            });
+        } else {
+            alert("お使いのブラウザは位置情報をサポートしていません。");
+        }
+    });
+
+    // 音声機能
+    const voiceBtn = document.getElementById('voiceBtn');
+    const stopVoiceBtn = document.getElementById('stopVoiceBtn');
+    const playBtn = document.getElementById('playBtn');
+    const voiceInfo = document.getElementById('voiceInfo');
+    let mediaRecorder;
+    let audioChunks = [];
+
+    voiceBtn.addEventListener('click', async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                playBtn.onclick = () => audio.play();
+                playBtn.disabled = false;
+                voiceInfo.textContent = "録音が完了しました。再生ボタンを押して聞くことができます。";
+                voiceBtn.disabled = false;
+                stopVoiceBtn.disabled = true;
+            };
+
+            mediaRecorder.start();
+            voiceInfo.textContent = "録音中...";
+            voiceBtn.disabled = true;
+            stopVoiceBtn.disabled = false;
+        } catch (err) {
+            console.error("音声の録音に失敗しました:", err);
+            alert("音声の権限が拒否されました。");
+        }
+    });
+
+    stopVoiceBtn.addEventListener('click', () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+    });
+</script>
+</body>
+</html>
