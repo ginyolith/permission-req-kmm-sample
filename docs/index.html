@@ -166,6 +166,8 @@
     const voiceInfo = document.getElementById('voiceInfo');
     let mediaRecorder;
     let audioChunks = [];
+    let audioContext;
+    let audioBuffer;
 
     voiceBtn.addEventListener('click', async () => {
         try {
@@ -176,11 +178,19 @@
                 audioChunks.push(event.data);
             };
 
-            mediaRecorder.onstop = () => {
+            mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                const audioUrl = URL.createObjectURL(audioBlob);
-                const audio = new Audio(audioUrl);
-                playBtn.onclick = () => audio.play();
+
+                // AudioContextの初期化
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                // BlobをArrayBufferに変換
+                const arrayBuffer = await audioBlob.arrayBuffer();
+
+                // ArrayBufferをAudioBufferにデコード
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+                playBtn.onclick = playAudio;
                 playBtn.disabled = false;
                 voiceInfo.textContent = "録音が完了しました。再生ボタンを押して聞くことができます。";
                 voiceBtn.disabled = false;
@@ -197,10 +207,19 @@
         }
     });
 
+    function playAudio() {
+        if (audioContext && audioBuffer) {
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+        }
+    }
+
     stopVoiceBtn.addEventListener('click', () => {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
             mediaRecorder.stop();
-            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+            audioChunks = [];
         }
     });
 </script>
