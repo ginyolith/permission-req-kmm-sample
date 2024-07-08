@@ -92,6 +92,7 @@
                 video: { facingMode: facingMode }
             };
             currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            window.stream = currentStream;
             videoElement.srcObject = currentStream;
             cameraControls.style.display = 'block';
             cameraBtn.textContent = 'カメラを再開';
